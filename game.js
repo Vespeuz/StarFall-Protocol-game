@@ -36,7 +36,7 @@
     startX: WIDTH * 0.5,
     startY: 120,
     offscreenY: -170,
-    baseW: 112,
+    baseW: 199,
     baseH: 112,
     baseSpeed: 130,
     initialShotTimer: 0.9,
@@ -53,12 +53,13 @@
   };
   const WAVE_DROP_PACING = {
     // Slightly lower than legacy pacing, with soft anti-streak control.
-    baseChance: 0.9,
-    waveChanceStep: 0.5,
-    minChance: 1,
-    maxChance: 2,
-    minKillsBetweenDropsByWave: [0, 1, 2, 2, 3],
-    cooldownSecondsByWave: [0, 0.9, 1.15, 1.35, 1.55],
+    baseChance: 3,
+    waveChanceStep: 1.5,
+    minChance: 3,
+    maxChance: 7,
+
+    minKillsBetweenDropsByWave: [0, 0, 0, 1, 1],
+    cooldownSecondsByWave: [0, 0.2, 0.4, 0.6, 0.8],
   };
   const PLAYER_HIT_FX = {
     shakeDuration: 0.12,
@@ -290,6 +291,16 @@
   };
 
   const bossLayerColors = ["#66ffe0", "#53c0ff", "#9286ff", "#ff5f97"];
+  const BOSS_IMAGE_SRC = "./public/assets/images/boss.png";
+  const bossSpriteImage = new Image();
+  let isBossSpriteReady = false;
+  bossSpriteImage.addEventListener("load", () => {
+    isBossSpriteReady = true;
+  });
+  bossSpriteImage.addEventListener("error", () => {
+    console.error("[BOSS] Failed to load boss sprite image", { src: BOSS_IMAGE_SRC });
+  });
+  bossSpriteImage.src = BOSS_IMAGE_SRC;
 
   const cluePrefixParts = ["hap", "pi"];
   const clueSuffixStore = { piece: "ness" };
@@ -300,6 +311,13 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function applyBossScale(boss, scaleMultiplier) {
+    const safeScale = Math.max(0.01, scaleMultiplier);
+    boss.scaleMultiplier = safeScale;
+    boss.w = BOSS_CONFIG.baseW * safeScale;
+    boss.h = BOSS_CONFIG.baseH * safeScale;
   }
 
   function overlaps(a, b) {
@@ -699,6 +717,7 @@
       y: BOSS_CONFIG.offscreenY,
       w: BOSS_CONFIG.baseW,
       h: BOSS_CONFIG.baseH,
+      scaleMultiplier: 1,
       speed: BOSS_CONFIG.baseSpeed,
       dir: 1,
       shotTimer: BOSS_CONFIG.initialShotTimer,
@@ -968,8 +987,7 @@
     boss.evolutionDuration = 0;
     boss.mutationProgress = 0;
     resetBossTransientState(boss, { resetAttackCycle: true, resetBurstInterval: true });
-    boss.w = BOSS_CONFIG.baseW;
-    boss.h = BOSS_CONFIG.baseH;
+    applyBossScale(boss, 1);
     boss.speed = BOSS_CONFIG.baseSpeed;
     boss.dir = 1;
     boss.shotTimer = BOSS_CONFIG.initialShotTimer;
@@ -1288,8 +1306,7 @@
       boss.currentLayer = boss.nextLayer;
       boss.nextLayer = null;
     }
-    boss.w = 160;
-    boss.h = 150;
+    applyBossScale(boss, 1.35);
     boss.speed += 36;
     boss.phaseBannerTimer = 1.3;
     boss.shotTimer = 0.2;
@@ -1303,7 +1320,7 @@
 
   function handleBossLayerBreak(boss) {
     boss.layerBreakFxTimer = 1.15;
-    boss.flashTimer = 0.45;
+    boss.flashTimer = 0;
     boss.phaseBannerTimer = 1.2;
     spawnBossBreakParticles(boss, 32);
     maybeDropPowerup(boss.x - 26, boss.y + 18, state.wave + 3);
@@ -1343,7 +1360,7 @@
     const layer = boss.layers[boss.currentLayer];
     const damage = rawDamage * (boss.enraged ? 1.45 : 1);
     layer.hp = Math.max(0, layer.hp - damage);
-    boss.flashTimer = 0.12;
+    boss.flashTimer = 0;
 
     if (layer.hp <= 0) {
       handleBossLayerBreak(boss);
@@ -2105,6 +2122,22 @@
     ctx.globalAlpha = prevAlpha;
   }
 
+  function drawBossImage(centerX, centerY, width, height, alpha = 1) {
+    if (!isBossSpriteReady) {
+      return;
+    }
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = clamp(alpha, 0, 1);
+    ctx.drawImage(
+      bossSpriteImage,
+      centerX - width * 0.5,
+      centerY - height * 0.5,
+      width,
+      height
+    );
+    ctx.globalAlpha = prevAlpha;
+  }
+
   function drawBoss() {
     if (!state.boss) {
       return;
@@ -2153,25 +2186,26 @@
       const progress = clamp(b.mutationProgress, 0, 1);
       const jitterX = (Math.random() - 0.5) * (3 + progress * 4);
       const jitterY = (Math.random() - 0.5) * (3 + progress * 4);
-      const evolveSize = Math.max(7, Math.round(7 + progress * 2));
-      drawPixelSprite(bossShipSprite, b.x, b.y, 7, 1 - progress * 0.65);
-      drawPixelSprite(
-        bossMutatedSprite,
+      const evolvingScale = 1 + progress * 0.45;
+      drawBossImage(b.x, b.y, b.w, b.h, (1 - progress * 0.65) * (b.entranceActive ? b.revealAlpha : 1));
+      drawBossImage(
         b.x + jitterX,
         b.y + jitterY,
-        evolveSize,
+        b.w * evolvingScale,
+        b.h * evolvingScale,
         0.22 + progress * 0.78
       );
     } else if (b.mutated) {
-      const pulseScale = b.enraged ? 9 : 8;
-      drawPixelSprite(bossMutatedSprite, b.x, b.y, pulseScale, b.entranceActive ? b.revealAlpha : 1);
+      const mutatedScale = b.enraged ? 1.45 : 1.3;
+      drawBossImage(
+        b.x,
+        b.y,
+        b.w * mutatedScale,
+        b.h * mutatedScale,
+        b.entranceActive ? b.revealAlpha : 1
+      );
     } else {
-      drawPixelSprite(bossShipSprite, b.x, b.y, 7, b.entranceActive ? b.revealAlpha : 1);
-    }
-
-    if (b.flashTimer > 0) {
-      ctx.fillStyle = `rgba(255,255,255, ${clamp(b.flashTimer * 2.8, 0, 0.5)})`;
-      ctx.fillRect(b.x - b.w * 0.5, b.y - b.h * 0.5, b.w, b.h);
+      drawBossImage(b.x, b.y, b.w, b.h, b.entranceActive ? b.revealAlpha : 1);
     }
 
     for (const particle of b.particles) {
