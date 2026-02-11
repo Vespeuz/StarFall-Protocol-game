@@ -59,7 +59,7 @@
     maxChance: 7,
 
     minKillsBetweenDropsByWave: [0, 0, 0, 1, 1],
-    cooldownSecondsByWave: [0, 0.2, 0.4, 0.6, 0.8],
+    cooldownSecondsByWave: [0, 0.1, 0.2, 0.3, 0.4],
   };
   const PLAYER_HIT_FX = {
     shakeDuration: 0.12,
