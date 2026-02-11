@@ -70,8 +70,8 @@
     retriggerCooldown: 0.11,
   };
   const POWERUP_DURATION_SECONDS = {
-    rapid_fire: 15,
-    spread_shot: 15,
+    rapid_fire: 10,
+    spread_shot: 10,
   };
 
   const input = {
