@@ -667,6 +667,7 @@
         cooldownTimer: 0,
       },
       continueTimer: 0,
+      bossDefeatFx: null,
       player: newPlayer(),
       loopTime: 0,
     };
@@ -1054,9 +1055,37 @@
   }
 
   function triggerBossDefeat() {
+    const defeatedBoss = state.boss;
     state.mode = "reveal";
     state.revealTimer = 0;
     state.transitionAlpha = 0;
+    if (defeatedBoss) {
+      const particleCount = 36;
+      const particles = [];
+      for (let i = 0; i < particleCount; i++) {
+        particles.push({
+          x: defeatedBoss.x + (Math.random() - 0.5) * defeatedBoss.w * 0.42,
+          y: defeatedBoss.y + (Math.random() - 0.5) * defeatedBoss.h * 0.36,
+          vx: (Math.random() - 0.5) * 260,
+          vy: -90 - Math.random() * 250,
+          size: 3 + Math.random() * 4,
+          life: 0.9 + Math.random() * 0.5,
+          color: pick(["#ffffff", "#9ef7ff", "#ff8cb8", "#ffd26f"]),
+        });
+      }
+      state.bossDefeatFx = {
+        x: defeatedBoss.x,
+        y: defeatedBoss.y,
+        w: defeatedBoss.w,
+        h: defeatedBoss.h,
+        timer: 0,
+        duration: 1.35,
+        completed: false,
+        particles,
+      };
+    } else {
+      state.bossDefeatFx = null;
+    }
     state.boss = null;
     state.bulletsEnemy = [];
     state.bulletsPlayer = [];
@@ -1324,7 +1353,7 @@
 
   function handleBossLayerBreak(boss) {
     boss.layerBreakFxTimer = 1.15;
-    boss.flashTimer = 0;
+    boss.flashTimer = 0.18;
     boss.phaseBannerTimer = 1.2;
     spawnBossBreakParticles(boss, 32);
     maybeDropPowerup(boss.x - 26, boss.y + 18, state.wave + 3);
@@ -1364,7 +1393,7 @@
     const layer = boss.layers[boss.currentLayer];
     const damage = rawDamage * (boss.enraged ? 1.45 : 1);
     layer.hp = Math.max(0, layer.hp - damage);
-    boss.flashTimer = 0;
+    boss.flashTimer = 0.14;
 
     if (layer.hp <= 0) {
       handleBossLayerBreak(boss);
@@ -1911,10 +1940,30 @@
   function updateReveal(dt) {
     state.revealTimer += dt;
     state.transitionAlpha = clamp(state.transitionAlpha + dt * 0.6, 0, 1);
-    if (!state.revealedClue && state.revealTimer > 1.4) {
+    if (state.bossDefeatFx && !state.bossDefeatFx.completed) {
+      const fx = state.bossDefeatFx;
+      fx.timer = Math.min(fx.duration, fx.timer + dt);
+      for (let i = fx.particles.length - 1; i >= 0; i--) {
+        const p = fx.particles[i];
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 360 * dt;
+        p.vx *= 0.985;
+        p.vy *= 0.985;
+        if (p.life <= 0) {
+          fx.particles.splice(i, 1);
+        }
+      }
+      if (fx.timer >= fx.duration && fx.particles.length === 0) {
+        fx.completed = true;
+      }
+    }
+    const bossFxReady = !state.bossDefeatFx || state.bossDefeatFx.completed;
+    if (!state.revealedClue && bossFxReady) {
       state.revealedClue = composeFinalClue();
     }
-    if (state.revealTimer > 4.6) {
+    if (state.revealedClue && state.revealTimer > 4.6) {
       state.mode = "end";
       state.endReason = "win";
       showEndPanel();
@@ -1966,7 +2015,101 @@
     }
   }
 
+  function drawBossFightBackground() {
+    const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    gradient.addColorStop(0, "#1a0708");
+    gradient.addColorStop(0.45, "#3a140f");
+    gradient.addColorStop(1, "#120406");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    const coreGlow = ctx.createRadialGradient(WIDTH * 0.5, HEIGHT * 0.42, 18, WIDTH * 0.5, HEIGHT * 0.42, WIDTH * 0.7);
+    coreGlow.addColorStop(0, "rgba(214, 124, 72, 0.16)");
+    coreGlow.addColorStop(0.5, "rgba(162, 68, 36, 0.08)");
+    coreGlow.addColorStop(1, "rgba(118, 38, 24, 0)");
+    ctx.fillStyle = coreGlow;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    // Forward-rush tunnel streaks (looping via depth cycle).
+    const centerX = WIDTH * 0.5;
+    const centerY = HEIGHT * 0.48;
+    const streakCount = 36;
+    for (let i = 0; i < streakCount; i++) {
+      const lane = i / streakCount;
+      const angle = -0.88 + lane * 1.76;
+      const cycle = (state.loopTime * 1.25 + lane * 0.91) % 1;
+      const depth = cycle * cycle;
+      const inner = 44 + depth * 220;
+      const outer = inner + 22 + depth * 230;
+      const width = 1 + depth * 2.6;
+      const alpha = 0.08 + depth * 0.22;
+      const x1 = centerX + Math.sin(angle) * inner;
+      const y1 = centerY + Math.cos(angle) * inner;
+      const x2 = centerX + Math.sin(angle) * outer;
+      const y2 = centerY + Math.cos(angle) * outer;
+      ctx.strokeStyle = `rgba(215, ${Math.round(72 + depth * 58)}, ${Math.round(36 + depth * 16)}, ${alpha})`;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    // Fast foreground light trails to push urgency.
+    const trailCount = 20;
+    for (let i = 0; i < trailCount; i++) {
+      const lane = i / trailCount;
+      const x = lane * WIDTH;
+      const cycle = (state.loopTime * 380 + i * 48) % (HEIGHT + 140);
+      const y = cycle - 70;
+      const len = 28 + ((i * 17) % 40);
+      ctx.fillStyle = `rgba(212, ${96 + ((i * 13) % 52)}, 62, 0.13)`;
+      ctx.fillRect(x - 1, y, 2, len);
+    }
+
+    // Ember particles moving downward (toward player/camera).
+    const emberCount = 26;
+    for (let i = 0; i < emberCount; i++) {
+      const lane = (i * 53.7) % WIDTH;
+      const cycle = (state.loopTime * (120 + (i % 6) * 18) + i * 22) % (HEIGHT + 60);
+      const y = cycle - 30;
+      const size = 1 + (i % 3);
+      const alpha = 0.22 + ((i % 5) * 0.05);
+      ctx.fillStyle = `rgba(226, ${110 + (i % 4) * 20}, 64, ${alpha})`;
+      ctx.fillRect(lane, y, size, size);
+    }
+
+    const boss = state.boss;
+    if (!boss) {
+      return;
+    }
+    if (boss.entranceActive) {
+      const t = 1 - boss.entranceTimer / Math.max(0.001, boss.entranceDuration);
+      const pulse = 0.05 + Math.sin(state.loopTime * 5) * 0.03;
+      ctx.fillStyle = `rgba(188, 104, 72, ${0.05 + pulse + (1 - t) * 0.07})`;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } else if (boss.graceActive) {
+      const glow = 0.05 + Math.sin(state.loopTime * 10) * 0.02;
+      ctx.fillStyle = `rgba(206, 134, 86, ${glow})`;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } else if (boss.evolving) {
+      ctx.fillStyle = `rgba(184, 62, 96, ${0.08 + boss.flickerAlpha * 0.2})`;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } else if (boss.enraged) {
+      ctx.fillStyle = "rgba(128, 30, 30, 0.1)";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } else if (boss.mutated) {
+      ctx.fillStyle = "rgba(142, 66, 34, 0.08)";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    }
+  }
+
   function drawBackground() {
+    if (state.boss) {
+      drawBossFightBackground();
+      return;
+    }
+
     const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
     gradient.addColorStop(0, "#04071d");
     gradient.addColorStop(1, "#0c1033");
@@ -1975,48 +2118,6 @@
     for (const star of starField) {
       ctx.fillStyle = `rgba(188, 225, 255, ${0.45 + (star.r % 1) * 0.5})`;
       ctx.fillRect(star.x, star.y, star.r, star.r);
-    }
-
-    if (state.boss) {
-      const boss = state.boss;
-      if (boss.entranceActive) {
-        const t = 1 - boss.entranceTimer / Math.max(0.001, boss.entranceDuration);
-        const pulse = 0.08 + Math.sin(state.loopTime * 4) * 0.03;
-        ctx.fillStyle = `rgba(8, 12, 26, ${0.28 + pulse + (1 - t) * 0.2})`;
-        ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      } else if (boss.graceActive) {
-        const glow = 0.07 + Math.sin(state.loopTime * 10) * 0.03;
-        ctx.fillStyle = `rgba(120, 176, 255, ${glow})`;
-        ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      } else if (boss.evolving) {
-        ctx.fillStyle = `rgba(132, 36, 92, ${0.12 + boss.flickerAlpha * 0.35})`;
-        ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      } else if (boss.enraged) {
-        ctx.fillStyle = "rgba(96, 18, 52, 0.12)";
-        ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      } else if (boss.mutated) {
-        ctx.fillStyle = "rgba(24, 92, 78, 0.08)";
-        ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      }
-
-      if (boss.evolving || boss.enraged) {
-        const lines = boss.evolving ? 8 : 5;
-        for (let i = 0; i < lines; i++) {
-          const y = (state.loopTime * (boss.evolving ? 120 : 70) + i * 90) % HEIGHT;
-          ctx.fillStyle = boss.evolving
-            ? `rgba(178, 255, 228, ${0.05 + boss.flickerAlpha * 0.18})`
-            : "rgba(255, 140, 186, 0.05)";
-          ctx.fillRect(0, y, WIDTH, 2);
-        }
-      }
-
-      if (boss.entranceActive) {
-        for (let i = 0; i < 5; i++) {
-          const y = (state.loopTime * 60 + i * 128) % HEIGHT;
-          ctx.fillStyle = "rgba(90, 130, 188, 0.06)";
-          ctx.fillRect(0, y, WIDTH, 3);
-        }
-      }
     }
   }
 
@@ -2126,20 +2227,27 @@
     ctx.globalAlpha = prevAlpha;
   }
 
-  function drawBossImage(centerX, centerY, width, height, alpha = 1) {
+  function drawBossImage(centerX, centerY, width, height, alpha = 1, hitFlash = 0) {
     if (!isBossSpriteReady) {
       return;
     }
-    const prevAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = clamp(alpha, 0, 1);
-    ctx.drawImage(
-      bossSpriteImage,
-      centerX - width * 0.5,
-      centerY - height * 0.5,
-      width,
-      height
-    );
-    ctx.globalAlpha = prevAlpha;
+    const x = centerX - width * 0.5;
+    const y = centerY - height * 0.5;
+    const clampedAlpha = clamp(alpha, 0, 1);
+    const clampedHitFlash = clamp(hitFlash, 0, 1);
+
+    ctx.save();
+    ctx.globalAlpha = clampedAlpha;
+    ctx.drawImage(bossSpriteImage, x, y, width, height);
+    if (clampedHitFlash > 0) {
+      // Re-draw the same sprite with a brief screen blend for silhouette-only hit feedback.
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = clampedHitFlash * 0.45;
+      ctx.filter = `brightness(${1 + clampedHitFlash * 2.2}) saturate(${1 + clampedHitFlash * 0.6})`;
+      ctx.drawImage(bossSpriteImage, x, y, width, height);
+      ctx.filter = "none";
+    }
+    ctx.restore();
   }
 
   function drawBoss() {
@@ -2147,12 +2255,11 @@
       return;
     }
     const b = state.boss;
+    const hitFlash = clamp(b.flashTimer / 0.14, 0, 1);
 
-    if (b.entranceActive) {
-      const silhouetteAlpha = clamp(0.55 + (1 - b.revealAlpha) * 0.35, 0.35, 0.9);
-      ctx.fillStyle = `rgba(4, 8, 20, ${silhouetteAlpha})`;
-      ctx.fillRect(b.x - b.w * 0.55, b.y - b.h * 0.55, b.w * 1.1, b.h * 1.1);
-    }
+    const entranceFlicker = b.entranceActive
+      ? clamp(0.35 + Math.sin(state.loopTime * 18) * 0.2 + (1 - b.revealAlpha) * 0.35, 0.08, 0.95)
+      : 0;
 
     if (b.windupTimer > 0 && b.windupDuration > 0) {
       const ratio = clamp(b.windupTimer / b.windupDuration, 0, 1);
@@ -2191,13 +2298,21 @@
       const jitterX = (Math.random() - 0.5) * (3 + progress * 4);
       const jitterY = (Math.random() - 0.5) * (3 + progress * 4);
       const evolvingScale = 1 + progress * 0.45;
-      drawBossImage(b.x, b.y, b.w, b.h, (1 - progress * 0.65) * (b.entranceActive ? b.revealAlpha : 1));
+      drawBossImage(
+        b.x,
+        b.y,
+        b.w,
+        b.h,
+        (1 - progress * 0.65) * (b.entranceActive ? b.revealAlpha : 1),
+        Math.max(hitFlash, entranceFlicker * 0.4)
+      );
       drawBossImage(
         b.x + jitterX,
         b.y + jitterY,
         b.w * evolvingScale,
         b.h * evolvingScale,
-        0.22 + progress * 0.78
+        0.22 + progress * 0.78,
+        Math.max(hitFlash, entranceFlicker * 0.4)
       );
     } else if (b.mutated) {
       const mutatedScale = b.enraged ? 1.45 : 1.3;
@@ -2206,10 +2321,31 @@
         b.y,
         b.w * mutatedScale,
         b.h * mutatedScale,
-        b.entranceActive ? b.revealAlpha : 1
+        b.entranceActive ? b.revealAlpha : 1,
+        Math.max(hitFlash, entranceFlicker * 0.35)
       );
     } else {
-      drawBossImage(b.x, b.y, b.w, b.h, b.entranceActive ? b.revealAlpha : 1);
+      drawBossImage(
+        b.x,
+        b.y,
+        b.w,
+        b.h,
+        b.entranceActive ? b.revealAlpha : 1,
+        Math.max(hitFlash, entranceFlicker)
+      );
+      if (b.entranceActive) {
+        const jitter = 1.6 + (1 - b.revealAlpha) * 1.8;
+        const ox = (Math.random() - 0.5) * jitter;
+        const oy = (Math.random() - 0.5) * jitter;
+        drawBossImage(
+          b.x + ox,
+          b.y + oy,
+          b.w,
+          b.h,
+          (1 - b.revealAlpha) * 0.25,
+          entranceFlicker * 0.5
+        );
+      }
     }
 
     for (const particle of b.particles) {
@@ -2404,6 +2540,35 @@
     }
   }
 
+  function drawBossDefeatFx() {
+    const fx = state.bossDefeatFx;
+    if (!fx) {
+      return;
+    }
+    const progress = clamp(fx.timer / Math.max(0.001, fx.duration), 0, 1);
+    const coreScale = 1 + progress * 1.15;
+    const coreAlpha = (1 - progress) * 0.7;
+    if (coreAlpha > 0.01) {
+      const rx = fx.w * 0.28 * coreScale;
+      const ry = fx.h * 0.22 * coreScale;
+      ctx.fillStyle = `rgba(255, 240, 180, ${coreAlpha})`;
+      ctx.beginPath();
+      ctx.ellipse(fx.x, fx.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 110, 180, ${coreAlpha * 0.55})`;
+      ctx.beginPath();
+      ctx.ellipse(fx.x, fx.y, rx * 0.58, ry * 0.58, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const p of fx.particles) {
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = clamp(p.life / 1.2, 0, 1);
+      ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function render() {
     drawBackground();
 
@@ -2431,6 +2596,9 @@
       drawPowerups();
       drawEnemies();
       drawBoss();
+      if (state.mode === "reveal") {
+        drawBossDefeatFx();
+      }
       drawBossMinions();
       drawBullets();
       drawPlayer();
