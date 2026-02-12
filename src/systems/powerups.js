@@ -51,13 +51,14 @@ export function applyPowerup(state, type, {
   onPickupSfx,
 }) {
   const player = state.player;
+  const durations = POWERUP_DURATION_SECONDS || { rapid_fire: 0, spread_shot: 0 };
   if (type === "rapid_fire") {
     player.rapid.active = true;
-    player.rapid.duration += POWERUP_DURATION_SECONDS.rapid_fire;
+    player.rapid.duration += durations.rapid_fire;
     player.rapid.level = clamp(player.rapid.level + 1, 1, 3);
   } else if (type === "spread_shot") {
     player.spread.active = true;
-    player.spread.duration += POWERUP_DURATION_SECONDS.spread_shot;
+    player.spread.duration += durations.spread_shot;
     player.spread.level = clamp(player.spread.level + 1, 1, 3);
   } else if (type === "shield") {
     player.shieldHits += 2;

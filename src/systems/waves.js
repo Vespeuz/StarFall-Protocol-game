@@ -35,7 +35,7 @@ export function spawnWave(state, waveNumber, { clamp, TOTAL_WAVES, WAVE_DROP_PAC
   state.waveKillsSinceDrop = WAVE_DROP_PACING.minKillsBetweenDropsByWave[waveIndex];
 }
 
-export function updateEnemyWave(state, dt, { WIDTH, triggerLoss, shootEnemy, pick }) {
+export function updateEnemyWave(state, dt, { WIDTH, HEIGHT, triggerLoss, shootEnemy, pick }) {
   if (!state.enemies.length) {
     return;
   }
@@ -60,10 +60,10 @@ export function updateEnemyWave(state, dt, { WIDTH, triggerLoss, shootEnemy, pic
     }
   }
 
-  const reachesPlayer = state.enemies.some(
-    (enemy) => enemy.alive && enemy.y + enemy.h / 2 >= state.player.y - 18
+  const reachesViewportBottom = state.enemies.some(
+    (enemy) => enemy.alive && enemy.y + enemy.h / 2 >= HEIGHT
   );
-  if (reachesPlayer) {
+  if (reachesViewportBottom) {
     triggerLoss();
     return;
   }

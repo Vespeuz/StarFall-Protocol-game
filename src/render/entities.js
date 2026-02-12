@@ -8,6 +8,9 @@ export function createEntityRenderer({
   eliteMinionSprite,
   colorByPower,
   iconByPower,
+  playerSpriteImage,
+  isPlayerSpriteReady,
+  powerupSprites,
   bossSpriteImage,
   isBossSpriteReady,
 }) {
@@ -23,22 +26,79 @@ export function createEntityRenderer({
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = flickerAlpha;
     if (p.shieldHits > 0) {
-      ctx.strokeStyle = "#60f7ff";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 34, 0, Math.PI * 2);
-      ctx.stroke();
+      const shieldStacks = Math.max(1, Math.min(3, p.shieldHits));
+      const pulseSpeed = 1.1 + shieldStacks * 0.45;
+      const pulsePhase = (Math.sin(state.loopTime * pulseSpeed * Math.PI * 2) + 1) * 0.5;
+      const coreColor = shieldStacks >= 3 ? "#93f8ff" : shieldStacks === 2 ? "#78ecff" : "#5fdfff";
+      const accentColor = shieldStacks >= 3 ? "#d9ffff" : "#aef8ff";
+      const radiusX = 30 + shieldStacks * 2 + (pulsePhase > 0.55 ? 1 : 0);
+      const radiusY = 22 + shieldStacks * 2 + (pulsePhase > 0.55 ? 1 : 0);
+      const ringSegments = shieldStacks >= 3 ? 20 : shieldStacks === 2 ? 16 : 12;
+      const rotation = state.loopTime * (1.2 + shieldStacks * 0.2);
+
+      // Circular pixel ring that wraps the ship silhouette (no box/bounds overlays).
+      ctx.fillStyle = coreColor;
+      for (let i = 0; i < ringSegments; i++) {
+        const angle = rotation + (i / ringSegments) * Math.PI * 2;
+        const x = Math.round(p.x + Math.cos(angle) * radiusX);
+        const y = Math.round(p.y + Math.sin(angle) * radiusY);
+        const segSize = shieldStacks >= 3 && i % 5 === 0 ? 2 : 1;
+        ctx.fillRect(x, y, segSize, segSize);
+      }
+
+      // Secondary circular ring for 2+ stacks to increase readable energy.
+      if (shieldStacks >= 2) {
+        const innerSegments = shieldStacks >= 3 ? 14 : 10;
+        const innerRadiusX = radiusX - 4;
+        const innerRadiusY = radiusY - 4;
+        ctx.fillStyle = shieldStacks >= 3 ? "#6eeeff" : "#57d3ff";
+        for (let i = 0; i < innerSegments; i++) {
+          const angle = -rotation * 1.15 + (i / innerSegments) * Math.PI * 2;
+          const x = Math.round(p.x + Math.cos(angle) * innerRadiusX);
+          const y = Math.round(p.y + Math.sin(angle) * innerRadiusY);
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      // Orbiting spark accents that circle the ship and reinforce protection feel.
+      const sparkCount = shieldStacks + 1;
+      const sparkOrbitX = radiusX + 2;
+      const sparkOrbitY = radiusY + 2;
+      ctx.fillStyle = accentColor;
+      for (let i = 0; i < sparkCount; i++) {
+        const angle = state.loopTime * (1.7 + shieldStacks * 0.35) + (i / sparkCount) * Math.PI * 2;
+        const sx = Math.round(p.x + Math.cos(angle) * sparkOrbitX);
+        const sy = Math.round(p.y + Math.sin(angle) * sparkOrbitY);
+        const sparkSize = shieldStacks >= 3 && i % 2 === 0 ? 2 : 1;
+        ctx.fillRect(sx, sy, sparkSize, sparkSize);
+      }
+    }
+
+    const spriteW = 42;
+    const spriteH = 30;
+    const ox = p.x - spriteW * 0.5;
+    const oy = p.y - spriteH * 0.5;
+
+    if (isPlayerSpriteReady()) {
+      ctx.drawImage(playerSpriteImage, ox, oy, spriteW, spriteH);
+      if (state.hitFx && state.hitFx.flickerTimer > 0) {
+        // Sprite-only hit flash using the same silhouette-preserving blend approach as the boss.
+        const pulse = Math.sin(state.loopTime * 90) > 0 ? 0.36 : 0.16;
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = pulse;
+        ctx.filter = "brightness(1.9) saturate(1.2)";
+        ctx.drawImage(playerSpriteImage, ox, oy, spriteW, spriteH);
+        ctx.filter = "none";
+        ctx.globalCompositeOperation = "source-over";
+      }
+      ctx.globalAlpha = prevAlpha;
+      return;
     }
 
     const pattern = playerShipSprite.pattern;
     const rows = pattern.length;
     const cols = pattern[0].length;
     const pixelSize = 3;
-    const spriteW = cols * pixelSize;
-    const spriteH = rows * pixelSize;
-    const ox = p.x - spriteW * 0.5;
-    const oy = p.y - spriteH * 0.5;
-
     for (let py = 0; py < rows; py++) {
       const row = pattern[py];
       for (let px = 0; px < cols; px++) {
@@ -274,10 +334,47 @@ export function createEntityRenderer({
 
   function drawBullets() {
     const state = getState();
-    ctx.fillStyle = "#ccfbff";
+    const hasRapid = Boolean(state.player.rapid.active);
+    const hasSpread = Boolean(state.player.spread.active);
+    const hasShield = state.player.shieldHits > 0;
+    const activeCount = (hasRapid ? 1 : 0) + (hasSpread ? 1 : 0) + (hasShield ? 1 : 0);
+
+    let playerBulletColor = "#9aa3b2";
+    if (activeCount === 1) {
+      if (hasRapid) {
+        playerBulletColor = "#3be46d";
+      } else if (hasSpread) {
+        playerBulletColor = "#ff9a2f";
+      } else {
+        playerBulletColor = "#4ea8ff";
+      }
+    } else if (activeCount === 2) {
+      if (hasRapid && hasSpread) {
+        playerBulletColor = "#c9e63f";
+      } else if (hasRapid && hasShield) {
+        playerBulletColor = "#36d6d8";
+      } else {
+        playerBulletColor = "#c24dff";
+      }
+    } else if (activeCount === 3) {
+      const hue = (state.loopTime * 180) % 360;
+      playerBulletColor = `hsl(${hue}, 95%, 62%)`;
+    }
+
+    ctx.fillStyle = playerBulletColor;
+    if (activeCount > 0) {
+      ctx.shadowBlur = activeCount === 3 ? 14 : 10;
+      ctx.shadowColor = playerBulletColor;
+    } else {
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+    }
     for (const bullet of state.bulletsPlayer) {
       ctx.fillRect(bullet.x - bullet.w / 2, bullet.y - bullet.h / 2, bullet.w, bullet.h);
     }
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+
     ctx.fillStyle = "#ffac58";
     for (const bullet of state.bulletsEnemy) {
       ctx.fillRect(bullet.x - bullet.w / 2, bullet.y - bullet.h / 2, bullet.w, bullet.h);
@@ -287,6 +384,11 @@ export function createEntityRenderer({
   function drawPowerups() {
     const state = getState();
     for (const p of state.powerups) {
+      const sprite = powerupSprites ? powerupSprites[p.type] : null;
+      if (sprite && sprite.isReady) {
+        ctx.drawImage(sprite.image, p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+        continue;
+      }
       ctx.fillStyle = colorByPower[p.type];
       ctx.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
       ctx.fillStyle = "#102033";

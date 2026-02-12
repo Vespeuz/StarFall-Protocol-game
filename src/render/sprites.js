@@ -202,4 +202,11 @@ export const eliteMinionSprite = {
 
 export const bossLayerColors = ["#66ffe0", "#53c0ff", "#9286ff", "#ff5f97"];
 
+export const POWERUP_IMAGE_SOURCES = {
+  rapid_fire: "./public/assets/images/rapid_fire.png",
+  shield: "./public/assets/images/shield.png",
+  spread_shot: "./public/assets/images/spread_shot.png",
+};
+
+export const PLAYER_IMAGE_SRC = "./public/assets/images/spaceship.png";
 export const BOSS_IMAGE_SRC = "./public/assets/images/boss.png";

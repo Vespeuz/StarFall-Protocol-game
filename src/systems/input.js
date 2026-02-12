@@ -2,16 +2,24 @@ export function createInputState() {
   return {
     left: false,
     right: false,
+    up: false,
+    down: false,
     shoot: false,
   };
 }
 
 export function onKeyChange(input, code, down) {
-  if (code === "ArrowLeft") {
+  if (code === "ArrowLeft" || code === "KeyA") {
     input.left = down;
   }
-  if (code === "ArrowRight") {
+  if (code === "ArrowRight" || code === "KeyD") {
     input.right = down;
+  }
+  if (code === "ArrowUp" || code === "KeyW") {
+    input.up = down;
+  }
+  if (code === "ArrowDown" || code === "KeyS") {
+    input.down = down;
   }
   if (code === "Space") {
     input.shoot = down;

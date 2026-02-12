@@ -5,6 +5,7 @@ export function createPlayerSystem({
   playerHitFx,
   powerupDurationSeconds,
   width,
+  height,
   onShootSfx,
   onPickupSfx,
   applyPowerup,
@@ -86,7 +87,7 @@ export function createPlayerSystem({
     const state = getState();
     applyPowerup(state, type, {
       clamp,
-      powerupDurationSeconds,
+      POWERUP_DURATION_SECONDS: powerupDurationSeconds,
       onPickupSfx,
     });
   }
@@ -95,14 +96,33 @@ export function createPlayerSystem({
     const state = getState();
     const input = getInput();
     const player = state.player;
-    player.vx = 0;
+
+    let moveX = 0;
+    let moveY = 0;
     if (input.left) {
-      player.vx = -player.speed;
+      moveX -= 1;
     }
     if (input.right) {
-      player.vx = player.speed;
+      moveX += 1;
     }
+    if (input.up) {
+      moveY -= 1;
+    }
+    if (input.down) {
+      moveY += 1;
+    }
+
+    if (moveX === 0 && moveY === 0) {
+      player.vx = 0;
+      player.vy = 0;
+    } else {
+      const length = Math.hypot(moveX, moveY);
+      player.vx = (moveX / length) * player.speed;
+      player.vy = (moveY / length) * player.speed;
+    }
+
     player.x = clamp(player.x + player.vx * dt, player.w * 0.6, width - player.w * 0.6);
+    player.y = clamp(player.y + player.vy * dt, player.h * 0.6, height - player.h * 0.6);
 
     player.shotCooldown = Math.max(0, player.shotCooldown - dt);
     if (input.shoot) {

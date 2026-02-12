@@ -1,4 +1,4 @@
-export function createRuntimeContext({ gameTitle, bossImageSrc }) {
+export function createRuntimeContext({ gameTitle, bossImageSrc, playerImageSrc, powerupImageSources }) {
   const canvas = document.getElementById("game-canvas");
   const ctx = canvas.getContext("2d");
 
@@ -43,6 +43,11 @@ export function createRuntimeContext({ gameTitle, bossImageSrc }) {
     isReady: false,
     image: bossSpriteImage,
   };
+  const playerSpriteImage = new Image();
+  const playerSprite = {
+    isReady: false,
+    image: playerSpriteImage,
+  };
 
   bossSpriteImage.addEventListener("load", () => {
     bossSprite.isReady = true;
@@ -51,6 +56,27 @@ export function createRuntimeContext({ gameTitle, bossImageSrc }) {
     console.error("[BOSS] Failed to load boss sprite image", { src: bossImageSrc });
   });
   bossSpriteImage.src = bossImageSrc;
+  playerSpriteImage.addEventListener("load", () => {
+    playerSprite.isReady = true;
+  });
+  playerSpriteImage.addEventListener("error", () => {
+    console.error("[PLAYER] Failed to load player sprite image", { src: playerImageSrc });
+  });
+  playerSpriteImage.src = playerImageSrc;
+
+  const powerupSprites = {};
+  for (const [type, src] of Object.entries(powerupImageSources || {})) {
+    const image = new Image();
+    const sprite = { isReady: false, image, src };
+    image.addEventListener("load", () => {
+      sprite.isReady = true;
+    });
+    image.addEventListener("error", () => {
+      console.error("[POWERUP] Failed to load powerup sprite image", { type, src });
+    });
+    image.src = src;
+    powerupSprites[type] = sprite;
+  }
 
   return {
     canvas,
@@ -59,6 +85,8 @@ export function createRuntimeContext({ gameTitle, bossImageSrc }) {
     ...dimensions,
     starField,
     bossSprite,
+    playerSprite,
+    powerupSprites,
     refs: {
       rafId: null,
       deterministicMode: false,
