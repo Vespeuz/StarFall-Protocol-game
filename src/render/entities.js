@@ -11,9 +11,10 @@ export function createEntityRenderer({
   playerSpriteImage,
   isPlayerSpriteReady,
   powerupSprites,
-  bossSpriteImage,
-  isBossSpriteReady,
+  bossSprites,
 }) {
+  const BOSS_PHASE_TRANSITION_DURATION = 1.05;
+
   function drawPlayer() {
     const state = getState();
     const p = state.player;
@@ -28,50 +29,59 @@ export function createEntityRenderer({
     if (p.shieldHits > 0) {
       const shieldStacks = Math.max(1, Math.min(3, p.shieldHits));
       const pulseSpeed = 1.1 + shieldStacks * 0.45;
-      const pulsePhase = (Math.sin(state.loopTime * pulseSpeed * Math.PI * 2) + 1) * 0.5;
-      const coreColor = shieldStacks >= 3 ? "#93f8ff" : shieldStacks === 2 ? "#78ecff" : "#5fdfff";
-      const accentColor = shieldStacks >= 3 ? "#d9ffff" : "#aef8ff";
-      const radiusX = 30 + shieldStacks * 2 + (pulsePhase > 0.55 ? 1 : 0);
-      const radiusY = 22 + shieldStacks * 2 + (pulsePhase > 0.55 ? 1 : 0);
-      const ringSegments = shieldStacks >= 3 ? 20 : shieldStacks === 2 ? 16 : 12;
-      const rotation = state.loopTime * (1.2 + shieldStacks * 0.2);
+      const pulse = 0.5 + 0.5 * Math.sin(state.loopTime * pulseSpeed * Math.PI * 2);
+      const orbitSpeed = 1.15 + shieldStacks * 0.25;
+      const orbitAngle = state.loopTime * orbitSpeed;
+      const baseRadius = 28 + shieldStacks * 2;
+      const radius = baseRadius + pulse * 3;
+      const ringWidth = 2.2 + shieldStacks * 0.5;
+      const glowBlur = 8 + shieldStacks * 4;
 
-      // Circular pixel ring that wraps the ship silhouette (no box/bounds overlays).
-      ctx.fillStyle = coreColor;
-      for (let i = 0; i < ringSegments; i++) {
-        const angle = rotation + (i / ringSegments) * Math.PI * 2;
-        const x = Math.round(p.x + Math.cos(angle) * radiusX);
-        const y = Math.round(p.y + Math.sin(angle) * radiusY);
-        const segSize = shieldStacks >= 3 && i % 5 === 0 ? 2 : 1;
-        ctx.fillRect(x, y, segSize, segSize);
-      }
+      const hue = shieldStacks >= 3 ? 190 : shieldStacks === 2 ? 200 : 210;
+      const ringColor = `hsla(${hue}, 95%, 72%, ${0.55 + pulse * 0.25})`;
+      const coreGlow = `hsla(${hue}, 100%, 70%, ${0.18 + pulse * 0.18})`;
+      const arcSpan = Math.PI * (0.95 + shieldStacks * 0.16);
 
-      // Secondary circular ring for 2+ stacks to increase readable energy.
+      ctx.save();
+      ctx.shadowBlur = glowBlur;
+      ctx.shadowColor = ringColor;
+      ctx.strokeStyle = ringColor;
+      ctx.lineWidth = ringWidth;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, orbitAngle, orbitAngle + arcSpan);
+      ctx.stroke();
+
+      // Secondary smooth ring for higher stack readability.
       if (shieldStacks >= 2) {
-        const innerSegments = shieldStacks >= 3 ? 14 : 10;
-        const innerRadiusX = radiusX - 4;
-        const innerRadiusY = radiusY - 4;
-        ctx.fillStyle = shieldStacks >= 3 ? "#6eeeff" : "#57d3ff";
-        for (let i = 0; i < innerSegments; i++) {
-          const angle = -rotation * 1.15 + (i / innerSegments) * Math.PI * 2;
-          const x = Math.round(p.x + Math.cos(angle) * innerRadiusX);
-          const y = Math.round(p.y + Math.sin(angle) * innerRadiusY);
-          ctx.fillRect(x, y, 1, 1);
-        }
+        ctx.strokeStyle = `hsla(${hue + 12}, 95%, 78%, ${0.32 + pulse * 0.22})`;
+        ctx.lineWidth = 1.2 + shieldStacks * 0.3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius - 4, -orbitAngle * 1.15, -orbitAngle * 1.15 + Math.PI * 0.9);
+        ctx.stroke();
       }
 
-      // Orbiting spark accents that circle the ship and reinforce protection feel.
-      const sparkCount = shieldStacks + 1;
-      const sparkOrbitX = radiusX + 2;
-      const sparkOrbitY = radiusY + 2;
-      ctx.fillStyle = accentColor;
-      for (let i = 0; i < sparkCount; i++) {
-        const angle = state.loopTime * (1.7 + shieldStacks * 0.35) + (i / sparkCount) * Math.PI * 2;
-        const sx = Math.round(p.x + Math.cos(angle) * sparkOrbitX);
-        const sy = Math.round(p.y + Math.sin(angle) * sparkOrbitY);
-        const sparkSize = shieldStacks >= 3 && i % 2 === 0 ? 2 : 1;
-        ctx.fillRect(sx, sy, sparkSize, sparkSize);
+      // Soft inner energy field.
+      const energyGradient = ctx.createRadialGradient(p.x, p.y, radius * 0.45, p.x, p.y, radius + 6);
+      energyGradient.addColorStop(0, "rgba(120, 220, 255, 0)");
+      energyGradient.addColorStop(0.65, coreGlow);
+      energyGradient.addColorStop(1, "rgba(120, 220, 255, 0)");
+      ctx.fillStyle = energyGradient;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Orbiting smooth energy nodes.
+      const nodeCount = shieldStacks + 1;
+      for (let i = 0; i < nodeCount; i++) {
+        const a = orbitAngle * 1.2 + (i / nodeCount) * Math.PI * 2;
+        const nx = p.x + Math.cos(a) * (radius + 1.5);
+        const ny = p.y + Math.sin(a) * (radius + 1.5);
+        ctx.fillStyle = `hsla(${hue + 20}, 100%, 82%, ${0.65 + pulse * 0.2})`;
+        ctx.beginPath();
+        ctx.arc(nx, ny, shieldStacks >= 3 ? 2.2 : 1.8, 0, Math.PI * 2);
+        ctx.fill();
       }
+      ctx.restore();
     }
 
     const spriteW = 42;
@@ -181,8 +191,66 @@ export function createEntityRenderer({
     ctx.globalAlpha = prevAlpha;
   }
 
-  function drawBossImage(centerX, centerY, spriteWidth, spriteHeight, alpha = 1, hitFlash = 0) {
-    if (!isBossSpriteReady()) {
+  function resolveBossPhaseKey(layerIndex, layerCount, isEnraged) {
+    if (isEnraged) {
+      return "phase3";
+    }
+    if (layerCount <= 0 || layerIndex <= 0) {
+      return "phase1";
+    }
+    return "phase2";
+  }
+
+  function resolveBossSpriteImage(phaseKey) {
+    const lookupOrder = [phaseKey, "phase2", "phase1"];
+    for (const key of lookupOrder) {
+      const sprite = bossSprites ? bossSprites[key] : null;
+      if (sprite && sprite.isReady) {
+        return sprite.image;
+      }
+    }
+    return null;
+  }
+
+  function resolveBossVisualProfile(phaseKey, boss) {
+    if (phaseKey === "phase3") {
+      return {
+        scale: 1.45,
+        glowColor: "255, 96, 150",
+        glowBlur: 24,
+        glowAlpha: 0.7,
+      };
+    }
+    if (phaseKey === "phase2") {
+      return {
+        scale: boss && boss.mutated ? 1.3 : 1.08,
+        glowColor: "102, 255, 220",
+        glowBlur: boss && boss.mutated ? 18 : 12,
+        glowAlpha: boss && boss.mutated ? 0.52 : 0.34,
+      };
+    }
+    return {
+      scale: 1,
+      glowColor: "150, 220, 255",
+      glowBlur: 6,
+      glowAlpha: 0.16,
+    };
+  }
+
+  function drawBossImage({
+    image,
+    centerX,
+    centerY,
+    spriteWidth,
+    spriteHeight,
+    alpha = 1,
+    hitFlash = 0,
+    glowColor = "0, 0, 0",
+    glowBlur = 0,
+    glowAlpha = 0,
+    surge = 0,
+  }) {
+    if (!image) {
       return;
     }
     const x = centerX - spriteWidth * 0.5;
@@ -192,14 +260,28 @@ export function createEntityRenderer({
 
     ctx.save();
     ctx.globalAlpha = clampedAlpha;
-    ctx.drawImage(bossSpriteImage, x, y, spriteWidth, spriteHeight);
+    if (glowBlur > 0 && glowAlpha > 0) {
+      ctx.shadowBlur = glowBlur;
+      ctx.shadowColor = `rgba(${glowColor}, ${clamp(glowAlpha, 0, 1)})`;
+    }
+    ctx.drawImage(image, x, y, spriteWidth, spriteHeight);
+    if (surge > 0) {
+      const clampedSurge = clamp(surge, 0, 1);
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = clampedSurge * 0.42;
+      ctx.filter = `brightness(${1 + clampedSurge * 1.6}) saturate(${1 + clampedSurge * 0.9})`;
+      ctx.drawImage(image, x, y, spriteWidth, spriteHeight);
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+    }
     if (clampedHitFlash > 0) {
       // Re-draw the same sprite with a brief screen blend for silhouette-only hit feedback.
       ctx.globalCompositeOperation = "screen";
       ctx.globalAlpha = clampedHitFlash * 0.45;
       ctx.filter = `brightness(${1 + clampedHitFlash * 2.2}) saturate(${1 + clampedHitFlash * 0.6})`;
-      ctx.drawImage(bossSpriteImage, x, y, spriteWidth, spriteHeight);
+      ctx.drawImage(image, x, y, spriteWidth, spriteHeight);
       ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
     }
     ctx.restore();
   }
@@ -211,6 +293,10 @@ export function createEntityRenderer({
     }
     const b = state.boss;
     const hitFlash = clamp(b.flashTimer / 0.14, 0, 1);
+    const layerCount = Array.isArray(b.layers) ? b.layers.length : 0;
+    const currentPhaseKey = resolveBossPhaseKey(b.currentLayer, layerCount, b.enraged);
+    const currentProfile = resolveBossVisualProfile(currentPhaseKey, b);
+    const currentImage = resolveBossSpriteImage(currentPhaseKey);
 
     const entranceFlicker = b.entranceActive
       ? clamp(0.35 + Math.sin(state.loopTime * 18) * 0.2 + (1 - b.revealAlpha) * 0.35, 0.08, 0.95)
@@ -252,54 +338,111 @@ export function createEntityRenderer({
       const progress = clamp(b.mutationProgress, 0, 1);
       const jitterX = (Math.random() - 0.5) * (3 + progress * 4);
       const jitterY = (Math.random() - 0.5) * (3 + progress * 4);
-      const evolvingScale = 1 + progress * 0.45;
-      drawBossImage(
-        b.x,
-        b.y,
-        b.w,
-        b.h,
-        (1 - progress * 0.65) * (b.entranceActive ? b.revealAlpha : 1),
-        Math.max(hitFlash, entranceFlicker * 0.4)
+      const evolvingTargetKey = "phase2";
+      const evolvingTargetImage = resolveBossSpriteImage(evolvingTargetKey);
+      const evolvingTargetProfile = resolveBossVisualProfile(evolvingTargetKey, {
+        ...b,
+        mutated: true,
+      });
+      drawBossImage({
+        image: currentImage,
+        centerX: b.x,
+        centerY: b.y,
+        spriteWidth: b.w * currentProfile.scale,
+        spriteHeight: b.h * currentProfile.scale,
+        alpha: (1 - progress * 0.65) * (b.entranceActive ? b.revealAlpha : 1),
+        hitFlash: Math.max(hitFlash, entranceFlicker * 0.4),
+        glowColor: currentProfile.glowColor,
+        glowBlur: currentProfile.glowBlur,
+        glowAlpha: currentProfile.glowAlpha,
+        surge: 0.2 + progress * 0.4,
+      });
+      drawBossImage({
+        image: evolvingTargetImage || currentImage,
+        centerX: b.x + jitterX,
+        centerY: b.y + jitterY,
+        spriteWidth: b.w * (evolvingTargetProfile.scale + progress * 0.15),
+        spriteHeight: b.h * (evolvingTargetProfile.scale + progress * 0.15),
+        alpha: 0.22 + progress * 0.78,
+        hitFlash: Math.max(hitFlash, entranceFlicker * 0.4),
+        glowColor: evolvingTargetProfile.glowColor,
+        glowBlur: evolvingTargetProfile.glowBlur + 4,
+        glowAlpha: evolvingTargetProfile.glowAlpha + 0.15,
+        surge: 0.45 + progress * 0.45,
+      });
+    } else if (b.transitionTimer > 0 && b.nextLayer !== null) {
+      const nextEnraged = layerCount > 0 && b.nextLayer >= layerCount - 1;
+      const nextPhaseKey = resolveBossPhaseKey(b.nextLayer, layerCount, nextEnraged);
+      const nextProfile = resolveBossVisualProfile(nextPhaseKey, {
+        ...b,
+        mutated: b.mutated || b.nextLayer >= 2,
+        enraged: nextEnraged,
+      });
+      const nextImage = resolveBossSpriteImage(nextPhaseKey);
+      const transitionProgress = clamp(
+        1 - b.transitionTimer / BOSS_PHASE_TRANSITION_DURATION,
+        0,
+        1
       );
-      drawBossImage(
-        b.x + jitterX,
-        b.y + jitterY,
-        b.w * evolvingScale,
-        b.h * evolvingScale,
-        0.22 + progress * 0.78,
-        Math.max(hitFlash, entranceFlicker * 0.4)
-      );
-    } else if (b.mutated) {
-      const mutatedScale = b.enraged ? 1.45 : 1.3;
-      drawBossImage(
-        b.x,
-        b.y,
-        b.w * mutatedScale,
-        b.h * mutatedScale,
-        b.entranceActive ? b.revealAlpha : 1,
-        Math.max(hitFlash, entranceFlicker * 0.35)
-      );
+      const transitionPulse = Math.sin(transitionProgress * Math.PI);
+      const baseAlpha = b.entranceActive ? b.revealAlpha : 1;
+
+      drawBossImage({
+        image: currentImage,
+        centerX: b.x,
+        centerY: b.y,
+        spriteWidth: b.w * currentProfile.scale,
+        spriteHeight: b.h * currentProfile.scale,
+        alpha: baseAlpha * (1 - transitionProgress * 0.65),
+        hitFlash: Math.max(hitFlash, entranceFlicker * 0.45),
+        glowColor: currentProfile.glowColor,
+        glowBlur: currentProfile.glowBlur,
+        glowAlpha: currentProfile.glowAlpha,
+        surge: transitionPulse * 0.5,
+      });
+      drawBossImage({
+        image: nextImage || currentImage,
+        centerX: b.x + (Math.random() - 0.5) * (1 + transitionPulse * 3),
+        centerY: b.y + (Math.random() - 0.5) * (1 + transitionPulse * 3),
+        spriteWidth: b.w * nextProfile.scale,
+        spriteHeight: b.h * nextProfile.scale,
+        alpha: baseAlpha * (0.18 + transitionProgress * 0.82),
+        hitFlash: Math.max(hitFlash, entranceFlicker * 0.35),
+        glowColor: nextProfile.glowColor,
+        glowBlur: nextProfile.glowBlur + 2,
+        glowAlpha: nextProfile.glowAlpha + transitionPulse * 0.22,
+        surge: 0.35 + transitionPulse * 0.45,
+      });
     } else {
-      drawBossImage(
-        b.x,
-        b.y,
-        b.w,
-        b.h,
-        b.entranceActive ? b.revealAlpha : 1,
-        Math.max(hitFlash, entranceFlicker)
-      );
+      drawBossImage({
+        image: currentImage,
+        centerX: b.x,
+        centerY: b.y,
+        spriteWidth: b.w * currentProfile.scale,
+        spriteHeight: b.h * currentProfile.scale,
+        alpha: b.entranceActive ? b.revealAlpha : 1,
+        hitFlash: Math.max(hitFlash, entranceFlicker),
+        glowColor: currentProfile.glowColor,
+        glowBlur: currentProfile.glowBlur,
+        glowAlpha: currentProfile.glowAlpha,
+      });
       if (b.entranceActive) {
         const jitter = 1.6 + (1 - b.revealAlpha) * 1.8;
         const ox = (Math.random() - 0.5) * jitter;
         const oy = (Math.random() - 0.5) * jitter;
-        drawBossImage(
-          b.x + ox,
-          b.y + oy,
-          b.w,
-          b.h,
-          (1 - b.revealAlpha) * 0.25,
-          entranceFlicker * 0.5
-        );
+        drawBossImage({
+          image: currentImage,
+          centerX: b.x + ox,
+          centerY: b.y + oy,
+          spriteWidth: b.w * currentProfile.scale,
+          spriteHeight: b.h * currentProfile.scale,
+          alpha: (1 - b.revealAlpha) * 0.25,
+          hitFlash: entranceFlicker * 0.5,
+          glowColor: currentProfile.glowColor,
+          glowBlur: currentProfile.glowBlur,
+          glowAlpha: currentProfile.glowAlpha,
+          surge: entranceFlicker * 0.35,
+        });
       }
     }
 

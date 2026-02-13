@@ -54,7 +54,7 @@ import {
   bossLayerColors,
   POWERUP_IMAGE_SOURCES,
   PLAYER_IMAGE_SRC,
-  BOSS_IMAGE_SRC,
+  BOSS_IMAGE_SOURCES,
 } from "./render/sprites.js";
 import { drawBackgroundLayer } from "./render/background.js";
 import { createEntityRenderer } from "./render/entities.js";
@@ -66,7 +66,7 @@ import { createSceneRenderer } from "./render/scene.js";
 
   const runtime = createRuntimeContext({
     gameTitle: GAME_TITLE,
-    bossImageSrc: BOSS_IMAGE_SRC,
+    bossImageSources: BOSS_IMAGE_SOURCES,
     playerImageSrc: PLAYER_IMAGE_SRC,
     powerupImageSources: POWERUP_IMAGE_SOURCES,
   });
@@ -77,7 +77,7 @@ import { createSceneRenderer } from "./render/scene.js";
     WIDTH,
     HEIGHT,
     starField,
-    bossSprite,
+    bossSprites,
     playerSprite,
     powerupSprites,
     refs,
@@ -352,8 +352,7 @@ import { createSceneRenderer } from "./render/scene.js";
     playerSpriteImage: playerSprite.image,
     isPlayerSpriteReady: () => playerSprite.isReady,
     powerupSprites,
-    bossSpriteImage: bossSprite.image,
-    isBossSpriteReady: () => bossSprite.isReady,
+    bossSprites,
   });
 
   const hudRenderer = createHudRenderer({

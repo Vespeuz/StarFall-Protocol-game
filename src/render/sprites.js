@@ -209,4 +209,11 @@ export const POWERUP_IMAGE_SOURCES = {
 };
 
 export const PLAYER_IMAGE_SRC = "./public/assets/images/spaceship.png";
-export const BOSS_IMAGE_SRC = "./public/assets/images/boss.png";
+export const BOSS_IMAGE_SOURCES = {
+  phase1: "./public/assets/images/boss_phase_1.png",
+  phase2: "./public/assets/images/boss_phase_2.png",
+  phase3: "./public/assets/images/boss_phase_3.png",
+};
+
+// Backward-compatible alias for any existing single-sprite wiring.
+export const BOSS_IMAGE_SRC = BOSS_IMAGE_SOURCES.phase1;

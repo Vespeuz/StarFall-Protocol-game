@@ -1,4 +1,10 @@
-export function createRuntimeContext({ gameTitle, bossImageSrc, playerImageSrc, powerupImageSources }) {
+export function createRuntimeContext({
+  gameTitle,
+  bossImageSrc,
+  bossImageSources,
+  playerImageSrc,
+  powerupImageSources,
+}) {
   const canvas = document.getElementById("game-canvas");
   const ctx = canvas.getContext("2d");
 
@@ -38,24 +44,42 @@ export function createRuntimeContext({ gameTitle, bossImageSrc, playerImageSrc, 
     speed: Math.random() * 12 + 6,
   }));
 
-  const bossSpriteImage = new Image();
-  const bossSprite = {
+  const normalizedBossImageSources =
+    bossImageSources && typeof bossImageSources === "object"
+      ? bossImageSources
+      : {
+          phase1: bossImageSrc,
+          phase2: bossImageSrc,
+          phase3: bossImageSrc,
+        };
+
+  const bossSprites = {};
+  for (const [phase, src] of Object.entries(normalizedBossImageSources)) {
+    const image = new Image();
+    const sprite = {
+      isReady: false,
+      image,
+      src,
+    };
+    image.addEventListener("load", () => {
+      sprite.isReady = true;
+    });
+    image.addEventListener("error", () => {
+      console.error("[BOSS] Failed to load boss sprite image", { phase, src });
+    });
+    image.src = src;
+    bossSprites[phase] = sprite;
+  }
+  const bossSprite = bossSprites.phase1 || {
     isReady: false,
-    image: bossSpriteImage,
+    image: new Image(),
+    src: normalizedBossImageSources.phase1 || "",
   };
   const playerSpriteImage = new Image();
   const playerSprite = {
     isReady: false,
     image: playerSpriteImage,
   };
-
-  bossSpriteImage.addEventListener("load", () => {
-    bossSprite.isReady = true;
-  });
-  bossSpriteImage.addEventListener("error", () => {
-    console.error("[BOSS] Failed to load boss sprite image", { src: bossImageSrc });
-  });
-  bossSpriteImage.src = bossImageSrc;
   playerSpriteImage.addEventListener("load", () => {
     playerSprite.isReady = true;
   });
@@ -85,6 +109,7 @@ export function createRuntimeContext({ gameTitle, bossImageSrc, playerImageSrc, 
     ...dimensions,
     starField,
     bossSprite,
+    bossSprites,
     playerSprite,
     powerupSprites,
     refs: {
