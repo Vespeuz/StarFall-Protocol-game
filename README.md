@@ -1,5 +1,6 @@
 # Starfall Protocol
-<img width="1918" height="912" alt="image" src="https://github.com/user-attachments/assets/be31f1d4-0d56-4b52-8b26-21bdc67b1edb" />
+<img width="1919" height="907" alt="image" src="https://github.com/user-attachments/assets/d8656fdf-37f1-47e5-b14e-4ecf4a451dca" />
+
 Retro-style browser space shooter built with plain HTML, CSS, and JavaScript (no framework).
 
 ## Overview
